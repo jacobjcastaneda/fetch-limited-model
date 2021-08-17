@@ -6,6 +6,7 @@
 import numpy as np
 from stompy.grid.unstructured_grid import UnTRIM08Grid
 from scipy.interpolate import NearestNDInterpolator, LinearNDInterpolator
+import matplotlib.pyplot as plt
 import pdb
 import time
 import pickle
@@ -36,7 +37,7 @@ def array_NDInterp(xf, yf, xy=None, Z=None, type='Linear', interpolator=None):
 
 
         
-def fetch(grd, d, thetaw, res):
+def fetch(grd, d, thetaw, res, test=None):
     """
     grd: pass in stompy UnstructuredGrid Object
     d: bathymetry corresponding to grd cell-centers (made for SWAN)
@@ -53,7 +54,14 @@ def fetch(grd, d, thetaw, res):
     Df = np.zeros(ctrs.shape[0])
     interp = LinearNDInterpolator(ctrs, d)
     print("Begin computing Fetch...")
+    print("Test Mode...") if test else print("\n")
+    start = time.time()
     for i in range(ctrs.shape[0]):
+        if test:
+            if i%test != 0:
+                F[i] = -99
+                Df[i] = -99
+                continue
         xc, yc = ctrs[i, :]
         xe = xc + L*np.cos(thetaw)
         ye = yc + L*np.sin(thetaw)
@@ -69,7 +77,8 @@ def fetch(grd, d, thetaw, res):
         # print updates about progress
         if i != 0:
             if i%(5*ctrs.shape[0] // 100) == 0:
-                print('{:.2f}  % done on i = {} of {}'.format(100*i/ctrs.shape[0], i, ctrs.shape[0]))
+                print('{:.2f}  % done on i = {} of {}. Step Time: {} s'.format(100*i/ctrs.shape[0], i, 
+                                                                     ctrs.shape[0], time.time()-start))
          
     return F, Df
 
@@ -88,6 +97,13 @@ def read_node_depths(fp):
         tmp = elem.rstrip()
         lines[idx] = float(tmp)
     return np.asarray(lines)
+
+
+def visualize_grid(grd, vals, xlim, ylim):
+    fig, ax = plt.subplots()
+    grd.plot_cells(centers=True, values=vals)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
 
 
 
