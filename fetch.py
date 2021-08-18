@@ -97,7 +97,7 @@ def fetch(grd, d, thetaw, res, mask=None, plot=False, plotLoop=False):
     """
     grd: pass in stompy UnstructuredGrid Object
     d: bathymetry corresponding to grd cell-centers (made for SWAN)
-    thetaw: dir- of wind source 0 rad in x+ dir- (+) CCW
+    thetaw: dir- of wind source 0 rad in x+ dir- (+) CCW (Cartesian Convention, takes dir- of source!!)
     res: resolution for the 1D grid to determine fetch
     
     ----
@@ -224,7 +224,7 @@ if __name__ == "__main__":
     start = time.time()
     print("Running in Main...")
     # compute for wind source from West, with n=1000 grid resolution
-    THETAW = np.pi 
+    THETAW = 3*np.pi / 4  
     RES = 100
     
     fpgrd = 'input/sfei_v20_net_mod.grd'
@@ -233,7 +233,8 @@ if __name__ == "__main__":
     grd = UnTRIM08Grid(fpgrd)
     ctrs = grd.cells_center()
     # SSFB #get_mask(ctrs, np.array([550000, 577000]), np.array([4155000, 4175000]))
-    m = None#get_mask(ctrs, np.array([534000, 608000]), np.array([4200000, 4230000]))
+    # NSFB#get_mask(ctrs, np.array([534000, 608000]), np.array([4200000, 4230000]))
+    m = get_mask(ctrs, np.array([550000, 600000]), np.array([4130000, 4183500]))
     d = array_NDInterp(ctrs[:, 0], ctrs[:, 1], xy=grd.nodes['x'],
                        Z=read_node_depths(fpbathy), type='Nearest')
     #pdb.set_trace()
