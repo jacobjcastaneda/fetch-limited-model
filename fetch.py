@@ -59,16 +59,37 @@ def fetch_line(xc, yc, L, thetaw, res):
     return np.linspace(xc, xe, res), np.linspace(yc, ye, res), xe, ye
 
 def get_close_to_bdry(poly, ln, xc, yc, xe, ye, thetaw, res):
+    count = 0
     if poly.contains(ln):
         while poly.contains(ln):
             L = distance(xc, yc, xe, ye)*1.02
             xl, yl, xe, ye = fetch_line(xc, yc, L, thetaw, res)
             ln = geometry.LineString(zip(xl, yl))
+            #if L < 25:
+             #   xl = np.array([xc])
+              #  yl = np.array([yc])
+               # xe, ye = xc, yc
+            count = count + 1
+            if count > 1000:
+                with open('log.logs', 'a') as dst:
+                    dst.write('xc: {}, yc: {}, xe: {}, ye: {}\n'.format(xc, yc, xe, ye))
+                break
     else:
         while not poly.contains(ln):
             L = distance(xc, yc, xe, ye)*.98
             xl, yl, xe, ye = fetch_line(xc, yc, L, thetaw, res)
             ln = geometry.LineString(zip(xl, yl))
+            #if L < 25:
+             #   xl = np.array([xc])
+              #  yl = np.array([yc])
+               # xe, ye = xc, yc
+            count = count + 1
+            if count > 1000:
+                with open('log.logs', 'a') as dst:
+                    dst.write('xc: {}, yc: {}, xe: {}, ye: {}\n'.format(xc, yc, xe, ye))
+                    
+                break
+                
     return xl, yl, xe, ye
 
 
@@ -125,6 +146,7 @@ def fetch(grd, d, thetaw, res, mask=None, plot=False, plotLoop=False):
             plt.show()
             #pdb.set_trace()
         # print updates about progress
+        print(i)
         if i != 0:
             if i%100 == 0:
                 print('{:.2f}  % done on i = {} of {}. Step Time: {} s'.format(i*100/ctrs.shape[0], i, 
@@ -210,7 +232,8 @@ if __name__ == "__main__":
 
     grd = UnTRIM08Grid(fpgrd)
     ctrs = grd.cells_center()
-    m = get_mask(ctrs, np.array([550000, 577000]), np.array([4155000, 4175000]))
+    # SSFB #get_mask(ctrs, np.array([550000, 577000]), np.array([4155000, 4175000]))
+    m = None#get_mask(ctrs, np.array([534000, 608000]), np.array([4200000, 4230000]))
     d = array_NDInterp(ctrs[:, 0], ctrs[:, 1], xy=grd.nodes['x'],
                        Z=read_node_depths(fpbathy), type='Nearest')
     #pdb.set_trace()
