@@ -14,7 +14,7 @@ import copy
 import time
 import pickle
 
-def array_NDInterp(xf, yf, xy=None, Z=None, type='Linear', interpolator=None, mask=None):
+def array_NDInterp(xf, yf, xy=None, Z=None, type='Linear', interpolator=None):
     """
     xy: ndarray of x,y coordinates
     Z: scalar value at x,y
@@ -36,18 +36,9 @@ def array_NDInterp(xf, yf, xy=None, Z=None, type='Linear', interpolator=None, ma
     res = np.zeros(xf.shape[0])
     for i in range(xf.shape[0]):
         res[i] = interp(xf[i], yf[i])
-    if mask is not None:
-        res[~mask] = np.nan
-        return res
-    else:
-        return res
-
-
+    return res
     
-    
-    
-    
-def find_bdry(grd, poly, xl, yl, L, xc, yc):
+def find_polygon(grd, poly, xl, yl, L, xc, yc):
     lnLst = [geometry.LineString(zip(xl, yl))]
     lnlngth = len([x for x in lnLst[-1].coords])
     while lnlngth > 3:
@@ -57,12 +48,31 @@ def find_bdry(grd, poly, xl, yl, L, xc, yc):
             break
         lnlngth = len([x for x in lnLst[-1].coords])
     result = np.asarray(lnLst[-1].coords)
-    return result[:, 0], result[:, 1]
+    return result[:, 0], result[:, 1], result[-1, 0], result[-1, 1]
         
 def distance(x1, y1, x2, y2):
     return np.sqrt( (x2-x1)**2 + (y2-y1)**2 )
 
-def fetch(grd, d, thetaw, res, mask=None, plot=False):
+def fetch_line(xc, yc, L, thetaw, res):
+    xe = xc + L*np.cos(thetaw)
+    ye = yc + L*np.sin(thetaw)
+    return np.linspace(xc, xe, res), np.linspace(yc, ye, res), xe, ye
+
+def get_close_to_bdry(poly, ln, xc, yc, xe, ye, thetaw, res):
+    if poly.contains(ln):
+        while poly.contains(ln):
+            L = distance(xc, yc, xe, ye)*1.02
+            xl, yl, xe, ye = fetch_line(xc, yc, L, thetaw, res)
+            ln = geometry.LineString(zip(xl, yl))
+    else:
+        while not poly.contains(ln):
+            L = distance(xc, yc, xe, ye)*.98
+            xl, yl, xe, ye = fetch_line(xc, yc, L, thetaw, res)
+            ln = geometry.LineString(zip(xl, yl))
+    return xl, yl, xe, ye
+
+
+def fetch(grd, d, thetaw, res, mask=None, plot=False, plotLoop=False):
     """
     grd: pass in stompy UnstructuredGrid Object
     d: bathymetry corresponding to grd cell-centers (made for SWAN)
@@ -78,16 +88,13 @@ def fetch(grd, d, thetaw, res, mask=None, plot=False):
     F = np.zeros(ctrs.shape[0])
     Df = np.zeros(ctrs.shape[0])
     
-    #test = []
-    
-    #interp = LinearNDInterpolator(ctrs, d)
-    
     nodes = grd.nodes['x'][grd.boundary_cycle()]
     poly = geometry.Polygon(nodes)
+    interp = NearestNDInterpolator(ctrs, d)
     
     print("Begin computing Fetch...")
     start = time.time()
-    #pdb.set_trace()
+    #count = 1
     for i in range(ctrs.shape[0]):
         L = copy.deepcopy(L_init)
         if mask is not None:
@@ -96,84 +103,36 @@ def fetch(grd, d, thetaw, res, mask=None, plot=False):
                 Df[i] = -99
                 continue
         xc, yc = ctrs[i, :]
-        xe = xc + L*np.cos(thetaw)
-        ye = yc + L*np.sin(thetaw)
-        xl = np.linspace(xc, xe, res)
-        yl = np.linspace(yc, ye, res)
-        ###
-        #LOOP = True
-        #count = 0
-        #while LOOP:
-        if mask[i]:
-            #pdb.set_trace()
-            pass
-        start = time.time()
-        for i in range(10):
-            if i == 3:
-                pass
-                #pdb.set_trace()
-            # cuts line in half until within polygon boundary
-            xl, yl = find_bdry(grd, poly, xl, yl, L, xc, yc)
-            # new length is average of old L with length of line found within Polygon
-            L = np.mean([L, distance(xc, yc, xl[-1], yl[-1])])
-            xe = xc + L*np.cos(thetaw)
-            ye = yc + L*np.sin(thetaw)
-            xl = np.linspace(xc, xe, res)
-            yl = np.linspace(yc, ye, res)
-            ln = geometry.LineString(zip(xl, yl))
-            if poly.contains(ln):
-                while poly.contains(ln):
-                    L = distance(xc, yc, xl[-1], yl[-1])*1.05
-                    xe = xc + L*np.cos(thetaw)
-                    ye = yc + L*np.sin(thetaw)
-                    xl = np.linspace(xc, xe, res)
-                    yl = np.linspace(yc, ye, res)
-                    ln = geometry.LineString(zip(xl, yl))
-                break
-                
-            if i >= 3 and res < 100000:
-                # begin increasing resolution
-                res =  res*10
-            if plot and i > 10:
-                fig, ax = plt.subplots()
-                grd.plot_edges(ax=ax)
-                ax.scatter([xc,xe], [yc,ye], c='r', zorder=10)
-                ax.plot(xl, yl, 'k--')
-                plt.show()
-                
-        print('Fetch for Cell time: {}'.format(time.time() -  start))
         
-            
-            
+        xl, yl, xe, ye = fetch_line(xc, yc, L, thetaw, res)       # find first fetch_line. Big Guess
+        xl, yl, xe, ye = find_polygon(grd, poly, xl, yl, L, xc, yc)  # reduce line to one within Poly... Halve it
+        ln = geometry.LineString(zip(xl, yl))
+        xl, yl, xe, ye = get_close_to_bdry(poly, ln, xc, yc, xe, ye, thetaw, res)
+       
+        #pdb.set_trace()
+        #print('Fetch for Cell time: {}'.format(time.time() -  start))
+        #print('Eff = {} s / cell'.format((time.time() - start) / count))
+        #count = count + 1
+        dl = array_NDInterp(xl, yl, interpolator=interp) 
+        F[i] = distance(xc, yc, xe, ye)
+        Df[i] = np.mean(dl)
         
-        
-        
-        
-        #####
-        #rl = np.sqrt( (xl-xc)**2 + (yl-yc)**2 )
-        #dl = array_NDInterp(xl, yl, interpolator=interp)
-        #dl[np.isnan(dl)] = 0
-        
-        #imin = np.min(np.where(dl == 0))
-        F[i] = distance(xc, yc, xl[-1], yl[-1]) #rl[imin - 1]
-        Df[i] = 0 #np.mean(d[:imin]) if len(d[:imin]) > 0 else 0
-        
-        #test.append((xl, yl, rl, dl, imin))
         if plot:
             fig, ax = plt.subplots()
             grd.plot_edges(ax=ax)
             ax.scatter([xc,xe], [yc,ye], c='r', zorder=10)
             ax.plot(xl, yl, 'k--')
             plt.show()
+            #pdb.set_trace()
         # print updates about progress
         if i != 0:
-            if i%(ctrs.shape[0] // 100) == 0:
-                print('{:.2f}  % done on i = {} of {}. Step Time: {} s'.format(100*i/ctrs.shape[0], i, 
+            if i%100 == 0:
+                print('{:.2f}  % done on i = {} of {}. Step Time: {} s'.format(i*100/ctrs.shape[0], i, 
                                                                     ctrs.shape[0], time.time()-start))
     if mask is not None:
-        return ma.array(F, mask=~mask), ma.array(Df, mask=~mask) # , test
+        return ma.array(F, mask=~mask), ma.array(Df, mask=~mask)
     else:
-        return F, Df  # , test
+        return F, Df
 
 def read_node_depths(fp):
     """
@@ -251,16 +210,15 @@ if __name__ == "__main__":
 
     grd = UnTRIM08Grid(fpgrd)
     ctrs = grd.cells_center()
-    m = get_mask(ctrs, np.array([550000, 577000]), np.array([4155000, 4175000]), lighten=(True, 10))
+    m = get_mask(ctrs, np.array([550000, 577000]), np.array([4155000, 4175000]))
     d = array_NDInterp(ctrs[:, 0], ctrs[:, 1], xy=grd.nodes['x'],
-                       Z=read_node_depths(fpbathy), type='Nearest', mask=m)
+                       Z=read_node_depths(fpbathy), type='Nearest')
     #pdb.set_trace()
-    F, Df = fetch(grd, d, THETAW, RES, mask=m, plot=True)
- #   pdb.set_trace()
-    #print(F[:20], Df[:20])
+    F, Df = fetch(grd, d, THETAW, RES, mask=m, plot=False)
+
+
     print('Elapsed Time: ', time.time() - start)
-    #mapp = {'Fetch': F, 'AveDepth': Df}
-    #with open('fetch.pkl', 'wb') as dst:
-    #    pickle.dump(mapp, dst)
-    #pdb.set_trace()
+    mapp = {'Fetch': F, 'AveDepth': Df}
+    with open('fetch.pkl', 'wb') as dst:      
+        pickle.dump(mapp, dst)
     print('hello')
