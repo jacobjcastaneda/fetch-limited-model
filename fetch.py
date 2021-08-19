@@ -224,7 +224,7 @@ if __name__ == "__main__":
     start = time.time()
     print("Running in Main...")
     # compute for wind source from West, with n=1000 grid resolution
-    THETAW = 3*np.pi / 4  
+    THETAW = 144*np.pi/180 # mean wind dir- July 2018 
     RES = 100
     
     fpgrd = 'input/sfei_v20_net_mod.grd'
